@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11-Open-Redirect — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html" class="active">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 11 — Open redirect</h1>
+<p><strong>Flag:</strong> none (vulnerability without a flag). <strong>Type:</strong> OWASP A01 — Broken Access Control (Unvalidated Redirect)</p>
+<h2>How it works</h2>
+<p><code>/redirect?next=&lt;url&gt;</code> issues a <code>307</code> to whatever <code>next</code> contains, with no allow-list — including external origins (<code>https://evil.example.com</code>), scheme-relative (<code>//evil.example.com</code>) and even <code>javascript:</code> URLs. The footer and the Google login button route through it (<code>/redirect?next=https://accounts.google.com</code>), so links look trustworthy.</p>
+<h2>Impact</h2>
+<p>Phishing (a <code>42.tech</code> link that lands on an attacker site), and theft of tokens/codes appended to a legitimate-looking redirect (e.g. OAuth flows).</p>
+<h2>Remediation</h2>
+<ul>
+<li>Redirect only to a server-side allow-list of known paths/hosts, or to</li>
+</ul>
+<p>  relative paths you control; reject absolute/scheme-relative/<code>javascript:</code> URLs.</p>
+<ul>
+<li>If an external redirect is unavoidable, show an interstitial warning.</li>
+</ul>
+<footer>Generated from 11-Open-Redirect/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

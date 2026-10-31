@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Overview — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html" class="active">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Darkly v2 — Audit Walkthrough</h1>
+<p>A security audit of the <strong>Darkly v2</strong> web platform (42 Network clone): Ubuntu 24.04 + <strong>FastAPI</strong> (uvicorn) front end on <code>:4942</code>, <strong>PocketBase</strong> backend on <code>:8090</code>.</p>
+<blockquote><strong>Lab setup.</strong> The sealed appliance ships as <code>Darkly_v2.ova</code>. It is booted in a hypervisor (VirtualBox, or QEMU/KVM as used here) with NAT port-forwards <code>4942→4942</code>, <code>8090→8090</code>. All testing targets the web app at <code>http://localhost:4942</code> (and its backend <code>http://localhost:8090</code>) — the VM OS itself was never touched. Scripts assume a <strong>pristine</strong> appliance.  Several exploits exfiltrate via an out-of-band listener; the guest reaches the host at <strong><code>10.0.2.2</code></strong> under NAT. Start <code>tools/oob_listener.py 9900 /tmp/log</code> first for Breach 08 (the script does this automatically).</blockquote>
+<h2>Target profile</h2>
+<table>
+<thead><tr><th>Thing</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td>Front end</td><td>FastAPI 0.104 / uvicorn (<code>:4942</code>)</td></tr>
+<tr><td>Backend</td><td>PocketBase 0.22.4 (<code>:8090</code>, admin UI at <code>/_/</code>)</td></tr>
+<tr><td>Session</td><td>HS256 JWT in <code>session</code> cookie, secret <strong><code>42network</code></strong>, <strong>not HttpOnly</strong></td></tr>
+<tr><td>Roles (low→high)</td><td><code>visitor → student → cadet → staff → god</code></td></tr>
+<tr><td>Admin</td><td><code>sophie</code> (role <code>god</code>, id <code>enplwhu8jfo56oi</code>)</td></tr>
+<tr><td>Tutorial account</td><td><code>jdoe</code> / <code>abc123</code> (<code>jdoe@student.42.tech</code>)</td></tr>
+</tbody></table>
+<h2>Flags recovered (7)</h2>
+<table>
+<thead><tr><th>#</th><th>Flag</th><th>Breach (folder)</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>FLAG{md5_1s_4_n4m3pl4t3_n0t_4_l0ck}</code></td><td>01 — Weak password / brute force</td></tr>
+<tr><td>2</td><td><code>FLAG{r3s3t_t0k3n_w4s_just_md5_lol}</code></td><td>02 — Broken password reset</td></tr>
+<tr><td>3</td><td><code>FLAG{1d0r_ur_pr0f1l3_1s_m1n3}</code></td><td>03 — IDOR on profiles</td></tr>
+<tr><td>4</td><td><code>FLAG{just_p4tch_y0ur_0wn_r0l3_lol}</code></td><td>04 — Mass-assignment privesc</td></tr>
+<tr><td>5</td><td><code>FLAG{d3fus3dxml_n3xt_spr1nt_pr0m1s3}</code></td><td>06 — XXE → SSRF</td></tr>
+<tr><td>6</td><td><code>FLAG{th3_und3rsc0r3_sl4sh_kn0ws_th3_w4y}</code></td><td>07 — PocketBase superuser</td></tr>
+<tr><td>7</td><td><code>FLAG{xss_st0r3d_1s_n0t_4_f34tur3_w1l}</code></td><td>08 — Stored XSS (bot cookie)</td></tr>
+</tbody></table>
+<p>This satisfies the <strong>mandatory</strong> part (6 flags; here 7) and the 4-level privilege-escalation chain, plus more than the 10 required vulnerabilities.</p>
+<h3>The privilege-escalation chain (4 gates)</h3>
+<pre class="code"><code>visitor ──(01 brute force jdoe:abc123)──▶ student     → flag md5_1s (own grade)
+student ──(04 PATCH /api/profile role)──▶ cadet       → flag just_p4tch
+cadet   ──(06 XXE leaks jwt_secret ; 05 forge JWT)──▶ admin (sophie/god) → /admin
+admin   ──(06 leaks PB creds ; 07 PocketBase /_/)──▶ backend superuser   → flag th3_und3rsc0r3</code></pre>
+<p>The two <strong>"flags of choice"</strong> used are <strong>03 (IDOR)</strong> and <strong>02 (broken reset)</strong>; <strong>08 (stored XSS)</strong> is a bonus flag.</p>
+<h2>Vulnerabilities explained (16)</h2>
+<p>Flag-bearing: <strong>01</strong> weak password/brute force · <strong>02</strong> broken password reset · <strong>03</strong> profile IDOR · <strong>04</strong> mass-assignment privesc · <strong>06</strong> XXE→SSRF · <strong>07</strong> PocketBase superuser exposure · <strong>08</strong> stored XSS. No-flag: <strong>00</strong> info disclosure (debug headers, HTML comments, <code>robots.txt</code>, <code>/api/docs-internal</code>, base64 <code>validation_key</code>, <code>/backup</code> debug headers, <code>pw_hint</code> table) · <strong>05</strong> JWT forgery w/ leaked secret · <strong>09</strong> reflected XSS · <strong>10</strong> broken access control + filter injection on <code>/api/grades</code> · <strong>11</strong> open redirect · <strong>12</strong> unrestricted file upload · plus the <strong>missing <code>HttpOnly</code></strong> session-cookie flag (covered under 05/08).</p>
+<p>Each <code>NN-*/explanation.md</code> covers *how it works, impact, and remediation*; each <code>NN-*/exploit.sh</code> reproduces it and writes the recovered token to <code>NN-*/flag</code>.</p>
+<h2>How to run</h2>
+<pre class="code"><code># boot the appliance (VirtualBox import, or QEMU), confirm http://localhost:4942
+./run_all.sh                     # runs every breach, prints each flag
+# or individually:
+BASE=http://localhost:4942 ./01-Weak-Password-BruteForce/exploit.sh</code></pre>
+<h2>Status note (bonus)</h2>
+<p>The platform advertises <strong>10</strong> flags. <strong>7</strong> were recovered through pure web exploitation (above). The remaining <strong>3</strong> are generated inside the FastAPI application behind trigger conditions that did not surface during an extensive black-box audit (every endpoint fuzzed; PocketBase DB + full backup dumped; XXE HTTP-SSRF; moderation-bot abuse; reflected XSS; <code>/api/grades</code> filter injection; open redirect; LFI attempts on <code>/projects/download</code>; base64 <code>validation_key</code> → <code>/backup</code> metadata → <code>data/private_notes.txt</code>; localhost port scan via SSRF). They are documented here as open leads rather than guessed.</p>
+<footer>Generated from walkthrough.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

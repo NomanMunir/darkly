@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>00-Recon — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html" class="active">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 00 — Reconnaissance &amp; information disclosure</h1>
+<p><strong>Flag:</strong> none (this is the recon pass; it enables the rest). <strong>Type:</strong> OWASP A05 — Security Misconfiguration / A01 — Broken Access Control</p>
+<h2>What the platform leaks for free</h2>
+<ul>
+<li><strong>Debug/fingerprint headers</strong> on every response:</li>
+</ul>
+<p>  <code>server: uvicorn</code>, <code>x-powered-by: Python/3.11 FastAPI/0.104</code>,   <code>x-pocketbase: http://localhost:8090</code> (reveals the backend → Breach 07),   <code>x-42-internal: campus=paris</code>.</p>
+<ul>
+<li><strong><code>robots.txt</code></strong> lists the "secret" areas: `/admin /staff /internal /backup</li>
+</ul>
+<p>  /api/grades /_/ /static/uploads/` — i.e. a map of what to attack.</p>
+<ul>
+<li><strong>HTML source comments</strong> across pages are a running commentary of every bug:</li>
+</ul>
+<p>  SQL/SQLi history, non-HttpOnly session cookie, <code>xml.etree</code> instead of   defusedxml, <code>/internal/config</code> localhost-only, the JWT secret history   (<code>&quot;42&quot;</code> → <code>&quot;42network&quot;</code>), md5 password hints, etc.</p>
+<ul>
+<li>A <strong>base64 string</strong> hidden in a forum post (hint: *"Base64 is not encryption.</li>
+</ul>
+<p>  It's a costume"*): <code>dmFsaWRhdGlvbl9rZXk9NDJuZXR3b3Jr</code> →   <code>validation_key=42network</code>. Sending <code>X-Validation-Key: 42network</code> to <code>/backup</code>   unlocks debug backup metadata headers (<code>x-backup-dest</code>,   <code>x-backup-exclude: data/private_notes.txt</code>, …).</p>
+<ul>
+<li><strong><code>/api/docs-internal</code></strong> (any logged-in user) documents the data model,</li>
+</ul>
+<p>  including that <code>role</code> is writable via <code>PATCH /api/profile</code> (→ Breach 04) and   that <code>grades</code> has a <code>flag</code> field read via <code>/api/grades</code> (→ Breaches 01/10).</p>
+<ul>
+<li><strong><code>/staff/dashboard</code></strong> prints a users table including each user's <code>pw_hint</code></li>
+</ul>
+<p>  (= <code>md5(password)</code>), enabling offline cracking (→ Breach 01).</p>
+<h2>Impact</h2>
+<p>Each leak removes guesswork and directly enables a later breach: the backend location, the privilege model, the JWT secret, the weak-credential hints and the internal endpoints are all handed to an unauthenticated visitor.</p>
+<h2>Remediation</h2>
+<ul>
+<li>Strip server/framework/debug headers; don't advertise the backend.</li>
+<li>Don't ship source comments or <code>/api/docs-internal</code> to production; treat</li>
+</ul>
+<p>  <code>robots.txt</code> as a hint to attackers, not a control.</p>
+<ul>
+<li>Remove the base64 "secret", the <code>/backup</code> debug headers, and the <code>pw_hint</code></li>
+</ul>
+<p>  column; keep internal docs behind real auth.</p>
+<footer>Generated from 00-Recon/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

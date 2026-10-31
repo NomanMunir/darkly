@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>05-JWT-Forgery — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html" class="active">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 05 — Session JWT forgery (hard-coded / leaked secret)</h1>
+<p><strong>Flag:</strong> none of its own (this is the escalation <strong>gate</strong> <code>cadet → admin</code>; the <code>/admin</code> grades table echoes <code>FLAG{md5_1s_4_n4m3pl4t3_n0t_4_l0ck}</code>). <strong>Type:</strong> OWASP A02 — Cryptographic Failures / A07 — Auth failures.</p>
+<h2>How it works</h2>
+<p>The <code>session</code> cookie is a JWT:</p>
+<pre class="code"><code>{&quot;alg&quot;:&quot;HS256&quot;,&quot;typ&quot;:&quot;JWT&quot;}.{&quot;sub&quot;:&quot;&lt;id&gt;&quot;,&quot;login&quot;:&quot;jdoe&quot;,&quot;role&quot;:&quot;student&quot;,&quot;exp&quot;:...}</code></pre>
+<p>Its HS256 secret is leaked all over the platform:</p>
+<ul>
+<li>deploy-log comment — *"jwt secret was <code>42</code>. wil changed it to <code>42network</code>"*;</li>
+<li>the <code>/internal/config</code> SSRF dump (Breach 06) — <code>&quot;jwt_secret&quot;:&quot;42network&quot;</code>.</li>
+</ul>
+<p>Mass assignment (Breach 04) caps self-promotion at <code>cadet</code>. But with the secret we can <strong>sign our own token</strong> for any user and role. <code>/admin</code> authorises on the *user's* role (a forged <code>jdoe/god</code> token is rejected <code>403</code> because jdoe is not staff/god), so we impersonate the real admin by forging <code>sub=&lt;sophie id&gt;, login=sophie, role=god</code>. The admin panel opens.</p>
+<p>The cookie is additionally <strong>not <code>HttpOnly</code></strong> (TODO comment: *"migrate session cookie to httponly=true — ticket #4201"*), which is what makes the stored-XSS cookie theft in Breach 08 possible.</p>
+<h2>Impact</h2>
+<p>Complete authentication bypass: any account/role can be impersonated offline, without a password. This is the step that promotes the audit to full admin.</p>
+<h2>Remediation</h2>
+<ul>
+<li>Use a long, random, secret key from a secrets manager — never a guessable</li>
+</ul>
+<p>  literal, never committed, never returned by any endpoint.</p>
+<ul>
+<li>Prefer server-side sessions, or at least rotate keys and validate <code>kid</code>;</li>
+</ul>
+<p>  reject <code>alg:none</code>.</p>
+<ul>
+<li>Set the session cookie <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Strict</code>.</li>
+</ul>
+<footer>Generated from 05-JWT-Forgery/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

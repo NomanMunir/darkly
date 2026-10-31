@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>07-PocketBase-Admin — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html" class="active">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 07 — PocketBase superuser takeover</h1>
+<p><strong>Flag:</strong> <code>FLAG{th3_und3rsc0r3_sl4sh_kn0ws_th3_w4y}</code> <strong>Type:</strong> OWASP A05 — Security Misconfiguration / A01 — Broken Access Control <strong>Privilege gate:</strong> app-admin → <strong>full backend/database control</strong> (the final gate).</p>
+<h2>How it works</h2>
+<p>The PocketBase backend is directly exposed on <code>:8090</code> (leaked by the <code>x-pocketbase: http://localhost:8090</code> response header). Its admin dashboard lives at <strong><code>/_/</code></strong> — the flag name *"the underscore-slash knows the way"* points straight at it, and <code>robots.txt</code> even lists <code>Disallow: /_/</code>.</p>
+<p>The superuser credentials are disclosed by Breach 06's SSRF of <code>/internal/config</code>:</p>
+<pre class="code"><code>pb_admin_email    = admin@42network.local
+pb_admin_password = Darkly42Admin!</code></pre>
+<p>Authenticating (<code>POST /api/admins/auth-with-password</code>) yields a superuser token with full read/write over every collection. <code>internal_audit</code> contains the flag (*"god-tier export OK — flag retained for the security audit"*).</p>
+<h2>Impact</h2>
+<p>Total backend compromise: read/modify every user (password hashes' <code>pw_hint</code>, <code>recovery_code</code>, <code>private_note</code>), every grade, config, and the ability to create and download full database <strong>backups</strong> (<code>POST /api/backups</code>) — i.e. exfiltrate the entire datastore.</p>
+<h2>Remediation</h2>
+<ul>
+<li>Never expose the PocketBase admin API/UI to untrusted networks; bind it to</li>
+</ul>
+<p>  loopback or put it behind a VPN/allow-list.</p>
+<ul>
+<li>Rotate the leaked superuser credentials and store them in a secrets manager —</li>
+</ul>
+<p>  never in an HTTP-reachable config endpoint.</p>
+<ul>
+<li>Lock down collection API rules (least privilege) and disable the public health</li>
+</ul>
+<p>  endpoint from advertising capabilities.</p>
+<footer>Generated from 07-PocketBase-Admin/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>09-Reflected-XSS — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html" class="active">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 09 — Reflected XSS (newsletter banner)</h1>
+<p><strong>Flag:</strong> none (vulnerability without a flag). <strong>Type:</strong> OWASP A03 — Injection (Cross-Site Scripting, reflected)</p>
+<h2>How it works</h2>
+<p>Subscribing to the newsletter redirects to <code>/newsletter?email=&lt;value&gt;&amp;msg=subscribed</code>, and the page echoes the email into a success banner <strong>without HTML-encoding</strong>:</p>
+<pre class="code"><code>&lt;div class=&quot;alert alert-success&quot;&gt;You&#x27;re now subscribed with: &lt;img src=x onerror=alert(document.domain)&gt;&lt;/div&gt;</code></pre>
+<p><code>&lt;script&gt;</code>, <code>&lt;svg onload&gt;</code> and <code>&lt;img onerror&gt;</code> all execute. The source comments confirm it: *"the 'subscribed with: ___' banner echoes your email straight back … unescaped?? … define 'unescaped'"* and *"someone subscribed with a <code>&lt;script&gt;</code> tag last week … it worked."*</p>
+<p>A crafted link (<code>/newsletter?email=&lt;payload&gt;&amp;msg=subscribed</code>) sent to a victim runs attacker JS in their session.</p>
+<h2>Impact</h2>
+<p>Reflected XSS: session/credential theft, request forgery, UI redressing against any user who follows a crafted link.</p>
+<h2>Remediation</h2>
+<ul>
+<li>HTML-encode all reflected values (template auto-escaping), and validate that</li>
+</ul>
+<p>  <code>email</code> is actually an email.</p>
+<ul>
+<li>Add a strict <code>Content-Security-Policy</code>; set <code>HttpOnly</code> on session cookies.</li>
+</ul>
+<footer>Generated from 09-Reflected-XSS/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

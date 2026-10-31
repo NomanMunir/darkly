@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12-Unrestricted-File-Upload — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html" class="active">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 12 — Unrestricted file upload (no server-side validation)</h1>
+<p><strong>Flag:</strong> none (vulnerability without a flag). <strong>Type:</strong> OWASP A04 — Insecure Design / A05 — Security Misconfiguration</p>
+<h2>How it works</h2>
+<p>The agenda importer's <code>&lt;input type=&quot;file&quot; accept=&quot;.xml&quot;&gt;</code> restriction is client-side only. The server checks neither the extension nor the content-type before handing the bytes to the XML parser — deploy log: *"quick fix on file upload (removed the whitelist entirely)."* Files named <code>*.php</code> or sent with an arbitrary MIME type are accepted and processed.</p>
+<p>On its own this is a missing-validation finding; combined with the entity- expanding parser it is the delivery vector for the XXE/SSRF in Breach 06.</p>
+<h2>Impact</h2>
+<p>Removing upload validation widens the attack surface (parser abuse / XXE here; on a differently-configured deployment it enables webshell or content-type confusion attacks).</p>
+<h2>Remediation</h2>
+<ul>
+<li>Validate uploads server-side: allow-list extensions <strong>and</strong> sniff/enforce the</li>
+</ul>
+<p>  real content type; cap size; store outside the web root with non-executable   perms and randomised names.</p>
+<ul>
+<li>Parse XML with a hardened parser (see Breach 06).</li>
+</ul>
+<footer>Generated from 12-Unrestricted-File-Upload/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>

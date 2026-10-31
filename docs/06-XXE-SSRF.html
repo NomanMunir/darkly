@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>06-XXE-SSRF — Darkly v2 audit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+<nav class="side"><a href="index.html">Overview</a>
+<a href="00-Recon.html">00-Recon</a>
+<a href="01-Weak-Password-BruteForce.html">01-Weak-Password-BruteForce</a>
+<a href="02-Broken-Password-Reset.html">02-Broken-Password-Reset</a>
+<a href="03-IDOR-Profile.html">03-IDOR-Profile</a>
+<a href="04-PrivEsc-Mass-Assignment.html">04-PrivEsc-Mass-Assignment</a>
+<a href="05-JWT-Forgery.html">05-JWT-Forgery</a>
+<a href="06-XXE-SSRF.html" class="active">06-XXE-SSRF</a>
+<a href="07-PocketBase-Admin.html">07-PocketBase-Admin</a>
+<a href="08-Stored-XSS.html">08-Stored-XSS</a>
+<a href="09-Reflected-XSS.html">09-Reflected-XSS</a>
+<a href="10-Broken-Access-Grades.html">10-Broken-Access-Grades</a>
+<a href="11-Open-Redirect.html">11-Open-Redirect</a>
+<a href="12-Unrestricted-File-Upload.html">12-Unrestricted-File-Upload</a></nav>
+<main class="content">
+<div class="crumb">Darkly v2 — security audit</div>
+<h1>Breach 06 — XXE → SSRF (reads the localhost-only internal config)</h1>
+<p><strong>Flag:</strong> <code>FLAG{d3fus3dxml_n3xt_spr1nt_pr0m1s3}</code> <strong>Type:</strong> OWASP A05 — Security Misconfiguration / A03 — Injection (XXE) / SSRF</p>
+<h2>How it works</h2>
+<p><code>/agenda/import</code> accepts an XML file and parses it with external entities enabled. The platform admits it: deploy log *"disabled defusedxml temporarily (that was 6 months ago)"*, staff page tag *"stdlib ET (unsafe)"*, agenda note *"the importer parses any XML you upload, entities and all."*</p>
+<p>Testing shows the parser resolves <strong>external entities over HTTP</strong> (an external <code>SYSTEM &quot;http://…&quot;</code> entity triggers a server-side fetch; verified out-of-band). That turns XXE into <strong>SSRF</strong>. The endpoint <code>/internal/config</code> is blocked for remote clients (<code>403 forbidden</code>, checked on the peer IP), but when the *server* fetches it the request comes from <code>127.0.0.1</code> and passes. The resolved entity is reflected in the imported event's title, so we read the response directly:</p>
+<pre class="code"><code>{&quot;jwt_secret&quot;:&quot;42network&quot;,&quot;pb_admin_email&quot;:&quot;admin@42network.local&quot;,
+ &quot;pb_admin_password&quot;:&quot;Darkly42Admin!&quot;,&quot;app_version&quot;:&quot;1.0.0&quot;,
+ &quot;campus&quot;:&quot;wilcity&quot;,&quot;darkly_flag&quot;:&quot;FLAG{d3fus3dxml_n3xt_spr1nt_pr0m1s3}&quot;}</code></pre>
+<p>That single response yields the flag <strong>and</strong> the JWT secret (→ Breach 05) <strong>and</strong> the PocketBase admin credentials (→ Breach 07).</p>
+<blockquote>Note: <code>file://</code> entities return empty on this build (so classic local-file read is blocked), but HTTP external entities work — the exploitable primitive here is SSRF, not arbitrary file read.</blockquote>
+<h2>Impact</h2>
+<p>Internal-only configuration disclosure leading to full compromise: the JWT signing key and database-admin credentials are handed to any authenticated user. SSRF also lets the server be aimed at other internal endpoints.</p>
+<h2>Remediation</h2>
+<ul>
+<li>Parse XML with a hardened library (<code>defusedxml</code>): disable DTDs, external</li>
+</ul>
+<p>  entities and network access (<code>resolve_entities=False</code>, <code>no_network=True</code>).</p>
+<ul>
+<li>Don't rely on "localhost only" as a security boundary reachable via SSRF; add</li>
+</ul>
+<p>  real authentication/authorization to <code>/internal/config</code> and keep secrets out   of any HTTP-reachable endpoint.</p>
+<ul>
+<li>Restrict outbound requests the parser/app can make (egress allow-list).</li>
+</ul>
+<footer>Generated from 06-XXE-SSRF/explanation.md · do not edit the HTML by hand — run <code>python3 docs/build.py</code></footer>
+</main>
+</div>
+</body>
+</html>
