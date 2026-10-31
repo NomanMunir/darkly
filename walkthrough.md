@@ -56,10 +56,13 @@ their private stuff anyway. **wil**'s profile has a private note with a flag:
 `FLAG{1d0r_ur_pr0f1l3_1s_m1n3}`.
 
 ## Step 4 — Promoting myself → **FLAG 4** (folder `04-PrivEsc-Mass-Assignment`)
-jdoe is only a "student". When I edit my profile, the request also lets me set my
-own **role**. So I set myself to **cadet**. I log in again so the new role sticks,
-and now the staff dashboard opens for me, with a flag:
-`FLAG{just_p4tch_y0ur_0wn_r0l3_lol}`.
+jdoe is only a "student". The edit-profile page never shows a "role" box — but
+earlier, when I listed all users at `/api/users`, I saw every user record has a
+**`role`** field (`"role":"student"`, `"role":"god"`...). So I know the field
+exists even though the form hides it. I try adding that same field to my own
+profile-update request, and the server accepts it: I set myself to **cadet**. I
+log in again so the new role sticks, and now the staff dashboard opens for me,
+with a flag: `FLAG{just_p4tch_y0ur_0wn_r0l3_lol}`.
 
 It won't let me jump straight to "staff" or "god" this way — that needs Step 5.
 

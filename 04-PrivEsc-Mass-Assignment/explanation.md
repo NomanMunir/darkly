@@ -4,6 +4,15 @@
 **Type:** OWASP A01 — Broken Access Control / A08 — Mass assignment
 **Privilege gate:** `student → cadet`.
 
+## How I knew to try `role`
+The edit-profile page only shows harmless boxes (name, campus, avatar) — there is
+no "role" box anywhere in the form. But I had already listed every user through
+**`GET /api/users`**, and each record there carries a **`role`** field
+(`"role":"student"`, `"role":"god"`, ...). So I knew a `role` field *exists* on a
+user record, even though the form hides it. The obvious thing to try was adding
+that same field to my own profile-update request and seeing whether the server
+would accept it. It did.
+
 ## How it works
 `PATCH /api/profile` is meant to let a user edit harmless fields (first name,
 campus, avatar). The handler blindly binds the JSON body to the user record,
