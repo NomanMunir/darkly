@@ -1,82 +1,126 @@
-# Darkly v2 — Audit Walkthrough
+# Darkly v2 — my walkthrough (plain words)
 
-A security audit of the **Darkly v2** web platform (42 Network clone):
-Ubuntu 24.04 + **FastAPI** (uvicorn) front end on `:4942`, **PocketBase** backend
-on `:8090`.
+This is the story of how I broke into the Darkly website, step by step, in the
+order I actually did it. The site has two parts: the pages you see
+(`http://localhost:4942`) and the database behind them (`http://localhost:8090`).
+My goal was to find the hidden flags (secret codes that look like `FLAG{...}`).
 
-> **Lab setup.** The sealed appliance ships as `Darkly_v2.ova`. It is booted in a
-> hypervisor (VirtualBox, or QEMU/KVM as used here) with NAT port-forwards
-> `4942→4942`, `8090→8090`. All testing targets the web app at
-> `http://localhost:4942` (and its backend `http://localhost:8090`) — the VM OS
-> itself was never touched. Scripts assume a **pristine** appliance.
->
-> Several exploits exfiltrate via an out-of-band listener; the guest reaches the
-> host at **`10.0.2.2`** under NAT. Start `tools/oob_listener.py 9900 /tmp/log`
-> first for Breach 08 (the script does this automatically).
+Each step below has its own folder with a tiny script (`exploit.sh`) that does
+exactly what I describe, and a longer note (`explanation.md`) if you want the
+deeper "why". You can run everything at once with `./run_all.sh`.
 
-## Target profile
-| Thing | Value |
-|---|---|
-| Front end | FastAPI 0.104 / uvicorn (`:4942`) |
-| Backend | PocketBase 0.22.4 (`:8090`, admin UI at `/_/`) |
-| Session | HS256 JWT in `session` cookie, secret **`42network`**, **not HttpOnly** |
-| Roles (low→high) | `visitor → student → cadet → staff → god` |
-| Admin | `sophie` (role `god`, id `enplwhu8jfo56oi`) |
-| Tutorial account | `jdoe` / `abc123` (`jdoe@student.42.tech`) |
+I found **7 flags**. Here is how.
 
-## Flags recovered (7)
+---
 
-| # | Flag | Breach (folder) |
-|---|------|-----------------|
-| 1 | `FLAG{md5_1s_4_n4m3pl4t3_n0t_4_l0ck}` | 01 — Weak password / brute force |
-| 2 | `FLAG{r3s3t_t0k3n_w4s_just_md5_lol}` | 02 — Broken password reset |
-| 3 | `FLAG{1d0r_ur_pr0f1l3_1s_m1n3}` | 03 — IDOR on profiles |
-| 4 | `FLAG{just_p4tch_y0ur_0wn_r0l3_lol}` | 04 — Mass-assignment privesc |
-| 5 | `FLAG{d3fus3dxml_n3xt_spr1nt_pr0m1s3}` | 06 — XXE → SSRF |
-| 6 | `FLAG{th3_und3rsc0r3_sl4sh_kn0ws_th3_w4y}` | 07 — PocketBase superuser |
-| 7 | `FLAG{xss_st0r3d_1s_n0t_4_f34tur3_w1l}` | 08 — Stored XSS (bot cookie) |
+## Step 0 — Just looking around (folder `00-Recon`)
+Before touching anything I just read the site like a nosy visitor.
 
-This satisfies the **mandatory** part (6 flags; here 7) and the 4-level
-privilege-escalation chain, plus more than the 10 required vulnerabilities.
+- The page headers tell me it's built with FastAPI and that the database is at
+  `localhost:8090`. Free information.
+- `robots.txt` is supposed to hide pages from Google, but it basically gives me a
+  map of the secret pages (`/admin`, `/staff`, `/backup`, `/_/`, ...).
+- The page source (right-click → view source) is full of developers arguing in
+  comments, leaking almost every weakness.
+- A forum post hides a line of base64 text. I decode it and it says
+  `validation_key=42network`.
 
-### The privilege-escalation chain (4 gates)
-```
-visitor ──(01 brute force jdoe:abc123)──▶ student     → flag md5_1s (own grade)
-student ──(04 PATCH /api/profile role)──▶ cadet       → flag just_p4tch
-cadet   ──(06 XXE leaks jwt_secret ; 05 forge JWT)──▶ admin (sophie/god) → /admin
-admin   ──(06 leaks PB creds ; 07 PocketBase /_/)──▶ backend superuser   → flag th3_und3rsc0r3
-```
-The two **"flags of choice"** used are **03 (IDOR)** and **02 (broken reset)**;
-**08 (stored XSS)** is a bonus flag.
+Nothing secret yet, but now I know where everything is.
 
-## Vulnerabilities explained (16)
-Flag-bearing: **01** weak password/brute force · **02** broken password reset ·
-**03** profile IDOR · **04** mass-assignment privesc · **06** XXE→SSRF ·
-**07** PocketBase superuser exposure · **08** stored XSS.
-No-flag: **00** info disclosure (debug headers, HTML comments, `robots.txt`,
-`/api/docs-internal`, base64 `validation_key`, `/backup` debug headers,
-`pw_hint` table) · **05** JWT forgery w/ leaked secret · **09** reflected XSS ·
-**10** broken access control + filter injection on `/api/grades` ·
-**11** open redirect · **12** unrestricted file upload · plus the **missing
-`HttpOnly`** session-cookie flag (covered under 05/08).
+## Step 1 — The weak password → **FLAG 1** (folder `01-Weak-Password-BruteForce`)
+On the forum, a student called **jdoe** brags that he never changed his sign-up
+password, and people reply "it's near the top of the most famous list." That's a
+dare. I try the most common passwords at the login box, and **`abc123`** works.
 
-Each `NN-*/explanation.md` covers *how it works, impact, and remediation*; each
-`NN-*/exploit.sh` reproduces it and writes the recovered token to `NN-*/flag`.
+Now I'm logged in as jdoe. I open my grades page and there's the first flag:
+`FLAG{md5_1s_4_n4m3pl4t3_n0t_4_l0ck}`.
 
-## How to run
+(The site also shows a "password hint" that is just the md5 of the password, so I
+could also crack it on my own computer instead of guessing at the login — same
+result. More on that in the folder's note.)
+
+## Step 2 — The broken "forgot password" → **FLAG 2** (folder `02-Broken-Password-Reset`)
+I try the "forgot password" link for another student, **benjamin**. Instead of
+emailing him a reset link, the server hands the reset token straight back to me
+in the URL. Worse, that token is just the md5 of his email address — so I never
+even needed to ask.
+
+I use it to set benjamin's password to whatever I want, log in as him, and his
+settings page shows his recovery code, which is the flag:
+`FLAG{r3s3t_t0k3n_w4s_just_md5_lol}`.
+
+## Step 3 — Reading other people's profiles → **FLAG 3** (folder `03-IDOR-Profile`)
+The site gave me a list of all users and their ids. Profiles are supposed to be
+private, but if I just put someone else's id in the profile URL, it shows me
+their private stuff anyway. **wil**'s profile has a private note with a flag:
+`FLAG{1d0r_ur_pr0f1l3_1s_m1n3}`.
+
+## Step 4 — Promoting myself → **FLAG 4** (folder `04-PrivEsc-Mass-Assignment`)
+jdoe is only a "student". When I edit my profile, the request also lets me set my
+own **role**. So I set myself to **cadet**. I log in again so the new role sticks,
+and now the staff dashboard opens for me, with a flag:
+`FLAG{just_p4tch_y0ur_0wn_r0l3_lol}`.
+
+It won't let me jump straight to "staff" or "god" this way — that needs Step 5.
+
+## Step 5 — Faking the admin's login cookie (folder `05-JWT-Forgery`)
+The site accidentally told me the secret password it uses to sign login cookies:
+**`42network`**. With that secret I can make my own cookie that says I'm anyone.
+I make one for the admin **sophie**, and the admin page opens for me — no password
+needed. (This step is the key that unlocks admin; the flag it leads to is in the
+next steps.)
+
+## Step 6 — Tricking the server into reading its own secrets → **FLAG 5** (folder `06-XXE-SSRF`)
+The agenda page lets me upload an XML file and trusts it far too much. I write an
+XML file that secretly says "server, go fetch your own secret config page and put
+it here." That config page is normally blocked — unless the request comes from the
+server itself, which is exactly what my trick does.
+
+It works, and the secret page is printed back to me. It contains a flag:
+`FLAG{d3fus3dxml_n3xt_spr1nt_pr0m1s3}` — plus the database admin login.
+
+## Step 7 — Taking over the database → **FLAG 6** (folder `07-PocketBase-Admin`)
+That secret page handed me the database admin login
+(`admin@42network.local` / `Darkly42Admin!`). The database is reachable on port
+8090, so I log straight into it as admin. Now I can read every table. One of them,
+`internal_audit`, holds a flag: `FLAG{th3_und3rsc0r3_sl4sh_kn0ws_th3_w4y}`.
+
+## Step 8 — Making a robot steal a cookie for me → **FLAG 7** (folder `08-Stored-XSS`)
+A moderation robot opens every new forum post in a real browser, and that robot
+carries a secret cookie. Forum posts allow raw HTML, so I post a message with a
+hidden script that says "whoever opens this, send me your cookies." I start a tiny
+server to catch the result, wait about a minute, and the robot sends me its cookie
+— which contains the flag: `FLAG{xss_st0r3d_1s_n0t_4_f34tur3_w1l}`.
+
+---
+
+## The ladder (how the "levels" connect)
+The site has ranks: visitor → student → cadet → staff → god (admin).
+- I become a **student** by guessing jdoe's password (Step 1).
+- I become a **cadet** by editing my own role (Step 4).
+- I become the **admin** by faking the cookie with the leaked secret (Step 5),
+  which I got for free from the XML trick (Step 6).
+- I take over the whole **database** last (Step 7).
+
+## A few more weaknesses (no flag, but worth showing)
+- **09-Reflected-XSS** — the newsletter prints my email back as raw HTML, so a
+  crafted link could run a script in a victim's browser.
+- **10-Broken-Access-Grades** — the grades page shows me anyone's grades, and a
+  trick value dumps everyone's at once.
+- **11-Open-Redirect** — a `/redirect` link will forward a victim to any website,
+  great for phishing.
+- **12-Unrestricted-File-Upload** — the upload only checks the file type in the
+  browser, so I can send any kind of file.
+
+## How to run it
+Boot the VM, make sure `http://localhost:4942` answers, then:
 ```bash
-# boot the appliance (VirtualBox import, or QEMU), confirm http://localhost:4942
-./run_all.sh                     # runs every breach, prints each flag
-# or individually:
-BASE=http://localhost:4942 ./01-Weak-Password-BruteForce/exploit.sh
+./run_all.sh
 ```
+or run any single step, e.g. `bash 01-Weak-Password-BruteForce/exploit.sh`.
 
-## Status note (bonus)
-The platform advertises **10** flags. **7** were recovered through pure web
-exploitation (above). The remaining **3** are generated inside the FastAPI
-application behind trigger conditions that did not surface during an extensive
-black-box audit (every endpoint fuzzed; PocketBase DB + full backup dumped; XXE
-HTTP-SSRF; moderation-bot abuse; reflected XSS; `/api/grades` filter injection;
-open redirect; LFI attempts on `/projects/download`; base64 `validation_key` →
-`/backup` metadata → `data/private_notes.txt`; localhost port scan via SSRF).
-They are documented here as open leads rather than guessed.
+## One honest note
+The site claims 10 flags. I found 7 using only the website (no cheating by
+opening the virtual machine). The other 3 are hidden deeper in the app's code
+behind triggers I couldn't reach from the outside; they're noted as open leads
+rather than guessed.

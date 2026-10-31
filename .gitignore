@@ -17,3 +17,7 @@ rockyou.txt
 *.cookies
 *.ck
 cookies.txt
+payload.xml
+post.txt
+catch.log
+notxml.php
